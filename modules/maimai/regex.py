@@ -8,7 +8,7 @@ from .libraries.maimaidx_apidata import get_alias, get_info, search_by_alias
 from .libraries.maimaidx_mapping import *
 from .libraries.maimaidx_music import TotalList
 from .libraries.maimaidx_utils import get_diff, get_grade_info
-from .maimai import query_plate, query_song_info, query_process
+from .maimai import query_plate, query_song_score, query_process
 
 total_list = TotalList()
 
@@ -38,7 +38,7 @@ async def _(msg: Bot.MessageSession):
             for sid in sorted(sid_list, key=int):
                 s = (await total_list.get()).by_id(sid)
                 if s:
-                    res += f"{s['id']} - {s['title']}{' (DX)' if s['type'] == 'DX' else ''}\n"
+                    res += f"{s["id"]} - {s["title"]}{" (DX)" if s["type"] == "DX" else ""}\n"
             await msg.finish(res.strip())
         else:
             sid = str(sid_list[0])
@@ -80,7 +80,7 @@ async def _(msg: Bot.MessageSession):
     if not music:
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
     title = (
-        f"{music['id']} - {music['title']}{' (DX)' if music['type'] == 'DX' else ''}"
+        f"{music["id"]} - {music["title"]}{" (DX)" if music["type"] == "DX" else ""}"
     )
     alias = await get_alias(msg, sid)
     if len(alias) == 0:
@@ -91,11 +91,11 @@ async def _(msg: Bot.MessageSession):
         await msg.finish([Plain(result.strip())])
 
 
-@mai_regex.regex(r"(.+)\s?有什[么麼]分\s?(.+)?", desc="{maimai.help.maimai_regex.info}")
+@mai_regex.regex(r"(.+)\s?有什[么麼]分\s?(.+)?", desc="{maimai.help.maimai_regex.score}")
 async def _(msg: Bot.MessageSession):
     songname = msg.matched_msg.groups()[0]
     username = msg.matched_msg.groups()[1]
-    await query_song_info(msg, songname, username)
+    await query_song_score(msg, songname, username)
 
 
 @mai_regex.regex(r"(\d+\+?)\s?([a-zA-Z]+\+?)\s?[进進]度\s?(.+)?", desc="{maimai.help.maimai_regex.process}")
@@ -145,7 +145,7 @@ async def _(msg: Bot.MessageSession):
                 music = music_data.random()
                 await msg.finish(
                     await get_info(
-                        music, Plain(f"\n{'/'.join(str(ds) for ds in music.ds)}")
+                        music, Plain(f"\n{"/".join(str(ds) for ds in music.ds)}")
                     )
                 )
         except ValueError:

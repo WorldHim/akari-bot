@@ -49,7 +49,7 @@ async def update_cover() -> bool:
 
 async def update_alias() -> bool:
     try:
-        url = "https://download.fanyu.site/maimai/alias.json"
+        url = "https://download.xraybot.site/maimai/alias.json"
         data = await get_url(url, 200, fmt="json")
 
         with open(mai_alias_path, "wb") as file:
@@ -62,7 +62,7 @@ async def update_alias() -> bool:
 
 async def get_info(music: Music, *details) -> MessageChain:
     info = [
-        Plain(f"{music.id} - {music.title}{' (DX)' if music['type'] == 'DX' else ''}")
+        Plain(f"{music.id} - {music.title}{" (DX)" if music["type"] == "DX" else ""}")
     ]
     cover_path = os.path.join(mai_cover_path, f"{music.id}.png")
     if os.path.exists(cover_path):
@@ -122,7 +122,7 @@ async def get_record(
     mai_cache_path = os.path.join(cache_path, "maimai-record")
     os.makedirs(mai_cache_path, exist_ok=True)
     cache_dir = os.path.join(
-        mai_cache_path, f"{msg.target.sender_id.replace('|', '_')}_maimaidx_record.json"
+        mai_cache_path, f"{msg.target.sender_id.replace("|", "_")}_maimaidx_record.json"
     )
     url = "https://www.diving-fish.com/api/maimaidxprober/query/player"
     try:
@@ -172,7 +172,7 @@ async def get_song_record(
         mai_cache_path = os.path.join(cache_path, "maimai-record")
         os.makedirs(mai_cache_path, exist_ok=True)
         cache_dir = os.path.join(
-            mai_cache_path, f"{msg.target.sender_id.replace('|', '_')}_maimaidx_song_record.json"
+            mai_cache_path, f"{msg.target.sender_id.replace("|", "_")}_maimaidx_song_record.json"
         )
         url = "https://www.diving-fish.com/api/maimaidxprober/dev/player/record"
         try:
@@ -203,7 +203,7 @@ async def get_song_record(
             return data
         except Exception as e:
             if str(e).startswith("400"):
-                raise ConfigValueError(msg.locale.t("error.config.invalid"))
+                raise ConfigValueError("[I18N:error.config.invalid]")
             Logger.error(traceback.format_exc())
             if use_cache and os.path.exists(cache_dir):
                 try:
@@ -216,7 +216,7 @@ async def get_song_record(
             else:
                 raise e
     else:
-        raise ConfigValueError(msg.locale.t("error.config.secret.not_found"))
+        raise ConfigValueError("[I18N:error.config.secret.not_found]")
 
 
 async def get_total_record(
@@ -225,7 +225,7 @@ async def get_total_record(
     mai_cache_path = os.path.join(cache_path, "maimai-record")
     os.makedirs(mai_cache_path, exist_ok=True)
     cache_dir = os.path.join(
-        mai_cache_path, f"{msg.target.sender_id.replace('|', '_')}_maimaidx_total_record.json"
+        mai_cache_path, f"{msg.target.sender_id.replace("|", "_")}_maimaidx_total_record.json"
     )
     url = "https://www.diving-fish.com/api/maimaidxprober/query/plate"
     payload["version"] = versions
@@ -283,7 +283,7 @@ async def get_plate(
     mai_cache_path = os.path.join(cache_path, "maimai-record")
     os.makedirs(mai_cache_path, exist_ok=True)
     cache_dir = os.path.join(
-        mai_cache_path, f"{msg.target.sender_id.replace('|', '_')}_maimaidx_plate_{version}.json"
+        mai_cache_path, f"{msg.target.sender_id.replace("|", "_")}_maimaidx_plate_{version}.json"
     )
     url = "https://www.diving-fish.com/api/maimaidxprober/query/plate"
     try:

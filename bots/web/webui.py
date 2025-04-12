@@ -1,9 +1,8 @@
 import os
 import sys
-from flask import Flask, redirect, send_from_directory, url_for
-from urllib.parse import urlparse
 
 import orjson as json
+from flask import Flask, redirect, send_from_directory, url_for
 
 sys.path.append(os.getcwd())
 
@@ -36,8 +35,8 @@ if os.path.exists(os.path.join(webui_path, "index.html")):
     def static_files(path):
         return send_from_directory(webui_path, path)
 
-if __name__ == "__main__" and Config("enable", True, table_name="bot_web") and \
-        os.path.exists(os.path.join(webui_path, "index.html")):
-    generate_config()
-    Logger.info(f"Visit AkariBot WebUI: http://{WEBUI_HOST}:{WEBUI_PORT}")
-    app.run(host=WEBUI_HOST, port=WEBUI_PORT, debug=False)
+    if __name__ == "__main__" and Config("enable", True, table_name="bot_web") and \
+            os.path.exists(os.path.join(webui_path, "index.html")):
+        generate_config()
+        Logger.info(f"Visit AkariBot WebUI: http://{WEBUI_HOST}:{WEBUI_PORT}")
+        app.run(host=WEBUI_HOST, port=WEBUI_PORT, debug=False)

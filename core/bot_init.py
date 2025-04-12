@@ -4,6 +4,7 @@ import os
 
 import orjson as json
 
+from core.builtins import Plain, I18NContext
 from core.background_tasks import init_background_task
 from core.config import CFGManager
 from core.constants import PrivateAssets, Secret
@@ -12,14 +13,19 @@ from core.loader import load_modules, ModulesManager
 from core.logger import Logger
 from core.queue import JobQueue
 from core.scheduler import Scheduler
+from core.utils.bash import run_sys_command
 from core.utils.info import Info
+from core.database import init_db
 
 
 async def init_async(start_scheduler=True) -> None:
-    try:
-        Info.version = os.popen("git rev-parse HEAD", "r").read().strip('\n')
-    except Exception:
+    await init_db()
+    returncode, commit_hash, _ = await run_sys_command(["git", "rev-parse", "HEAD"])
+    if returncode == 0:
+        Info.version = commit_hash
+    else:
         Logger.warning("Failed to get Git commit hash, is it a Git repository?")
+
     load_modules()
     gather_list = []
     modules = ModulesManager.return_modules_list()
@@ -33,7 +39,7 @@ async def init_async(start_scheduler=True) -> None:
                     max_instance=1,
                 )
     await asyncio.gather(*gather_list)
-    await init_background_task()
+    init_background_task()
     if start_scheduler:
         if not Info.subprocess:
             load_extra_schedulers()
@@ -63,11 +69,9 @@ async def load_prompt(bot) -> None:
                 m = await bot.fetch_target(author)
                 if m:
                     if (read := open_loader_cache.read()) != "":
-                        await m.send_direct_message(f"{m.parent.locale.t("loader.load.failed")}\n{read}".strip())
+                        await m.send_direct_message([I18NContext("loader.load.failed"), Plain(read.strip(), disable_joke=True)])
                     else:
-                        await m.send_direct_message(
-                            m.parent.locale.t("loader.load.success")
-                        )
+                        await m.send_direct_message(I18NContext("loader.load.success"))
         os.remove(author_cache)
 
 

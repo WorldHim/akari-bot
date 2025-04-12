@@ -44,11 +44,10 @@ async def update_assets():
     file_path = f"{random_cache_path()}.json"
     data = {}
     try:
-        update = await get_url(json_url, 200, fmt='json')
+        update = await get_url(json_url, 200, fmt="json")
     except Exception:
         traceback.format_exc()
         return False
-    print(update)
     if update:
         for song in update:
             diff = {}

@@ -1,6 +1,6 @@
 """利用阿里云API检查字符串是否合规。
 
-在使用前，应该在配置中填写"check_access_key_id"和"check_access_key_secret"以便进行鉴权。
+在使用前，请在配置文件中填写`check_access_key_id`和`check_access_key_secret`，以便进行鉴权。
 """
 
 import base64
@@ -43,17 +43,17 @@ def parse_data(result: dict, additional_text=None) -> Dict:
                         if "positions" in itemContext:
                             for pos in itemContext["positions"]:
                                 filter_words_length = pos["endPos"] - pos["startPos"]
-                                reason = f"[I18N:check.redacted,reason={itemDetail['label']}]"
+                                reason = f"[I18N:check.redacted,reason={itemDetail["label"]}]"
                                 content = (content[: pos["startPos"] + _offset] +
                                            reason + content[pos["endPos"] + _offset:])
                                 if additional_text:
                                     content += "\n" + additional_text + "\n"
                                 _offset += len(reason) - filter_words_length
                         else:
-                            content = f"[I18N:check.redacted,reason={itemDetail['label']}]"
+                            content = f"[I18N:check.redacted,reason={itemDetail["label"]}]"
                         status = False
                 else:
-                    content = f"[I18N:check.redacted.all,reason={itemDetail['label']}]"
+                    content = f"[I18N:check.redacted.all,reason={itemDetail["label"]}]"
 
                     if additional_text:
                         content += "\n" + additional_text + "\n"
@@ -87,9 +87,9 @@ async def check(*text: Union[str, List[str]], additional_text=None) -> List[Dict
     for q in query_list:
         for pq in query_list[q]:
             if not query_list[q][pq]:
-                cache = DirtyWordCache(pq)
-                if not cache.need_insert:
-                    query_list[q][pq] = parse_data(cache.get(), additional_text=additional_text)
+                cache = await DirtyWordCache.check(pq)
+                if cache:
+                    query_list[q][pq] = parse_data(cache.result, additional_text=additional_text)
 
     call_api_list = {}
     for q in query_list:
@@ -141,7 +141,7 @@ async def check(*text: Union[str, List[str]], additional_text=None) -> List[Dict
                     content = item["content"]
                     for n in call_api_list[content]:
                         query_list[n][content] = parse_data(item, additional_text=additional_text)
-                    DirtyWordCache(content).update(item)
+                    await DirtyWordCache.create(desc=content, result=item)
             else:
                 raise ValueError(resp.text)
 
@@ -171,6 +171,6 @@ def rickroll() -> str:
 
     :returns: Rickroll消息。
     """
-    if Config("enable_rickroll", True) and Config("rickroll_msg", cfg_type=str):
-        return Config("rickroll_msg", cfg_type=str)
+    if rickroll_msg := Config("rickroll_msg", cfg_type=str) and Config("enable_rickroll", True):
+        return rickroll_msg
     return "[I18N:error.message.chain.unsafe]"

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import sys
@@ -9,6 +10,7 @@ from bots.qqbot.info import *
 from bots.qqbot.message import MessageSession, FetchTarget
 from core.bot_init import init_async, load_prompt
 from core.builtins import PrivateAssets
+from core.close import cleanup_sessions
 from core.config import Config
 from core.constants.info import Info
 from core.constants.path import assets_path
@@ -18,8 +20,8 @@ from core.types import MsgInfo, Session
 PrivateAssets.set(os.path.join(assets_path, "private", "qqbot"))
 Info.dirty_word_check = Config("enable_dirty_check", False)
 Info.use_url_manager = Config("enable_urlmanager", False)
-qq_appid = str(Config("qq_bot_appid", cfg_type=(int, str), table_name="bot_qqbot"))
-qq_secret = Config("qq_bot_secret", cfg_type=str, secret=True, table_name="bot_qqbot")
+qqbot_appid = str(Config("qq_bot_appid", cfg_type=(int, str), table_name="bot_qqbot"))
+qqbot_secret = Config("qq_bot_secret", cfg_type=str, secret=True, table_name="bot_qqbot")
 
 
 class MyClient(botpy.Client):
@@ -176,17 +178,21 @@ class MyClient(botpy.Client):
 
 
 if Config("enable", False, table_name="bot_qqbot"):
-    intents = botpy.Intents.none()
-    intents.public_guild_messages = True
-    intents.public_messages = True
-    intents.direct_message = True
-    if Config("qq_private_bot", False, table_name="bot_qqbot"):
-        intents.guild_messages = True
+    loop = asyncio.get_event_loop()
+    try:
+        intents = botpy.Intents.none()
+        intents.public_guild_messages = True
+        intents.public_messages = True
+        intents.direct_message = True
+        if Config("qq_private_bot", False, table_name="bot_qqbot"):
+            intents.guild_messages = True
 
-    client = MyClient(intents=intents, bot_log=None)
+        client = MyClient(intents=intents, bot_log=None)
 
-    Info.client_name = client_name
-    if "subprocess" in sys.argv:
-        Info.subprocess = True
+        Info.client_name = client_name
+        if "subprocess" in sys.argv:
+            Info.subprocess = True
 
-    client.run(appid=qq_appid, secret=qq_secret)
+        loop.run_until_complete(client.start(appid=qqbot_appid, secret=qqbot_secret))
+    except (KeyboardInterrupt, SystemExit):
+        loop.run_until_complete(cleanup_sessions())

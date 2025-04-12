@@ -27,26 +27,22 @@ from core.builtins.message.elements import (
 )
 from core.builtins.message.internal import I18NContext, Voice
 from core.config import Config
-from core.database import BotDBUtil
+from core.database.models import AnalyticsData, TargetInfo
 from core.logger import Logger
 from core.utils.http import download
 
 enable_analytics = Config("enable_analytics", False)
 
 
-async def convert_embed(embed: EmbedElement):
+async def convert_embed(embed: EmbedElement, msg: MessageSessionT):
     if isinstance(embed, EmbedElement):
         files = []
         embeds = discord.Embed(
-            title=embed.title if embed.title else None,
-            description=embed.description if embed.description else None,
+            title=msg.locale.t_str(embed.title) if embed.title else None,
+            description=msg.locale.t_str(embed.description) if embed.description else None,
             color=embed.color if embed.color else None,
             url=embed.url if embed.url else None,
-            timestamp=(
-                datetime.datetime.fromtimestamp(embed.timestamp)
-                if embed.timestamp
-                else None
-            ),
+            timestamp=datetime.datetime.fromtimestamp(embed.timestamp) if embed.timestamp else None
         )
         if embed.image:
             upload = discord.File(await embed.image.get(), filename="image.png")
@@ -57,13 +53,15 @@ async def convert_embed(embed: EmbedElement):
             files.append(upload)
             embeds.set_thumbnail(url="attachment://thumbnail.png")
         if embed.author:
-            embeds.set_author(name=embed.author)
+            embeds.set_author(name=msg.locale.t_str(embed.author))
         if embed.footer:
-            embeds.set_footer(text=embed.footer)
+            embeds.set_footer(text=msg.locale.t_str(embed.footer))
         if embed.fields:
             for field in embed.fields:
                 embeds.add_field(
-                    name=field.name, value=field.value, inline=field.inline
+                    name=msg.locale.t_str(field.name),
+                    value=msg.locale.t_str(field.value),
+                    inline=field.inline
                 )
         return embeds, files
 
@@ -155,7 +153,7 @@ class MessageSession(MessageSessionT):
                         f"[Bot] -> [{self.target.target_id}]: Mention: {sender_prefix}|{str(x.id)}"
                     )
             elif isinstance(x, EmbedElement):
-                embeds, files = await convert_embed(x)
+                embeds, files = await convert_embed(x, self)
                 send_ = await self.session.target.send(
                     embed=embeds,
                     reference=(
@@ -283,8 +281,9 @@ class FetchTarget(FetchTargetT):
                     sender_id = match_sender.group(2)
             else:
                 sender_id = target_id
-
-            return Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
+            session = Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
+            await session.parent.data_init()
+            return session
 
     @staticmethod
     async def fetch_target_list(target_list: list) -> List[Bot.FetchedSession]:
@@ -304,39 +303,43 @@ class FetchTarget(FetchTargetT):
                     msgchain = message
                     if isinstance(message, str):
                         if i18n:
-                            msgchain = MessageChain(
-                                [Plain(x.parent.locale.t(message, **kwargs))]
-                            )
+                            msgchain = MessageChain([I18NContext(message, **kwargs)])
                         else:
                             msgchain = MessageChain([Plain(message)])
                     msgchain = MessageChain(msgchain)
                     await x.send_direct_message(msgchain)
                     if enable_analytics and module_name:
-                        BotDBUtil.Analytics(x).add("", module_name, "schedule")
+                        await AnalyticsData.create(target_id=x.target.target_id,
+                                                   sender_id=x.target.sender_id,
+                                                   command="",
+                                                   module_name=module_name,
+                                                   module_type="schedule")
                 except Exception:
                     Logger.error(traceback.format_exc())
         else:
-            get_target_id = BotDBUtil.TargetInfo.get_target_list(
+            get_target_id = await TargetInfo.get_target_list_by_module(
                 module_name, client_name
             )
             for x in get_target_id:
-                fetch = await FetchTarget.fetch_target(x.targetId)
+                fetch = await FetchTarget.fetch_target(x.target_id)
                 if fetch:
-                    if BotDBUtil.TargetInfo(fetch.target.target_id).is_muted:
+                    if x.muted:
                         continue
                     try:
                         msgchain = message
                         if isinstance(message, str):
                             if i18n:
-                                msgchain = MessageChain(
-                                    [Plain(fetch.parent.locale.t(message, **kwargs))]
-                                )
+                                msgchain = MessageChain([I18NContext(message, **kwargs)])
                             else:
                                 msgchain = MessageChain([Plain(message)])
                         msgchain = MessageChain(msgchain)
                         await fetch.send_direct_message(msgchain)
                         if enable_analytics and module_name:
-                            BotDBUtil.Analytics(fetch).add("", module_name, "schedule")
+                            await AnalyticsData.create(target_id=fetch.target.target_id,
+                                                       sender_id=fetch.target.sender_id,
+                                                       command="",
+                                                       module_name=module_name,
+                                                       module_type="schedule")
                     except Exception:
                         Logger.error(traceback.format_exc())
 

@@ -1,20 +1,21 @@
+import asyncio
 import glob
 import os
-import psutil
 import platform
 import re
+import secrets
 import sys
 import time
 import uuid
-from cpuinfo import get_cpu_info
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, UTC
 
-import asyncio
 import jwt
 import orjson as json
-import secrets
+import psutil
 import uvicorn
 from argon2 import PasswordHasher
+from cpuinfo import get_cpu_info
 from fastapi import FastAPI, WebSocket
 from fastapi import Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +23,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from tortoise.exceptions import DoesNotExist
 
 sys.path.append(os.getcwd())
 
@@ -29,22 +31,33 @@ from bots.web.bot import API_PORT, WEBUI_HOST, WEBUI_PORT  # noqa: E402
 from bots.web.info import client_name  # noqa: E402
 from core.bot_init import init_async  # noqa: E402
 from core.builtins import PrivateAssets  # noqa: E402
+from core.close import cleanup_sessions  # noqa: E402
 from core.config import Config  # noqa: E402
 from core.constants import config_filename, config_path, logs_path  # noqa: E402
 from core.constants.path import assets_path  # noqa: E402
-from core.database import BotDBUtil  # noqa: E402
+from core.database.models import SenderInfo, TargetInfo  # noqa: E402
 from core.extra.scheduler import load_extra_schedulers  # noqa: E402
-from core.utils.info import Info  # noqa: E402
+from core.i18n import Locale  # noqa: E402
 from core.loader import ModulesManager  # noqa: E402
 from core.logger import Logger  # noqa: E402
 from core.queue import JobQueue  # noqa: E402
 from core.scheduler import Scheduler  # noqa: E402
-from core.utils.i18n import Locale  # noqa: E402
-from modules.wiki.utils.dbutils import WikiTargetInfo  # noqa: E402
+from core.utils.info import Info  # noqa: E402
 
 started_time = datetime.now()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_async(start_scheduler=False)
+    load_extra_schedulers()
+    Scheduler.start()
+    await JobQueue.secret_append_ip()
+    await JobQueue.web_render_status()
+    yield
+    await cleanup_sessions()
+
+app = FastAPI(lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
 ph = PasswordHasher()
 
@@ -61,17 +74,17 @@ last_file_line_count = {}
 logs_history = []
 
 if not os.path.exists(CSRF_TOKEN_PATH):
-    with open(CSRF_TOKEN_PATH, 'wb') as f:
+    with open(CSRF_TOKEN_PATH, "wb") as f:
         f.write(json.dumps([]))
 
 
 def load_csrf_tokens():
-    with open(CSRF_TOKEN_PATH, 'r') as f:
+    with open(CSRF_TOKEN_PATH, "r") as f:
         return json.loads(f.read())
 
 
 def save_csrf_tokens(tokens):
-    with open(CSRF_TOKEN_PATH, 'wb') as f:
+    with open(CSRF_TOKEN_PATH, "wb") as f:
         f.write(json.dumps(tokens))
 
 
@@ -102,7 +115,7 @@ def verify_jwt(request: Request):
         raise HTTPException(status_code=401, detail="Invalid request")
 
     try:
-        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=['HS256'])
+        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=["HS256"])
         if payload.get("iat") > datetime.now(UTC).timestamp():
             raise HTTPException(status_code=400, detail="Invalid token")
         return {"message": "Success", "payload": payload}
@@ -122,15 +135,6 @@ app.add_middleware(
 )
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
-
-
-@app.on_event("startup")
-async def startup_event():
-    await init_async(start_scheduler=False)
-    load_extra_schedulers()
-    Scheduler.start()
-    await JobQueue.secret_append_ip()
-    await JobQueue.web_render_status()
 
 
 @app.get("/")
@@ -189,7 +193,7 @@ async def auth(request: Request, response: Response):
             "iat": datetime.now(UTC),  # 签发时间
             "iss": "auth-api"  # 签发者
         }
-        jwt_token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+        jwt_token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
         if not os.path.exists(PASSWORD_PATH):
             response.set_cookie(
@@ -220,7 +224,7 @@ async def auth(request: Request, response: Response):
             "iat": datetime.now(UTC),
             "iss": "auth-api"
         }
-        jwt_token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+        jwt_token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
         response.set_cookie(
             key="deviceToken",
@@ -309,9 +313,9 @@ async def server_info(request: Request):
             "percent": psutil.virtual_memory().percent,  # 内存使用百分比
         },
         "disk": {
-            "total": psutil.disk_usage('/').total / (1024 * 1024 * 1024),  # 磁盘总容量
-            "used": psutil.disk_usage('/').used / (1024 * 1024 * 1024),  # 磁盘已使用容量
-            "percent": psutil.disk_usage('/').percent,  # 磁盘使用百分比
+            "total": psutil.disk_usage("/").total / (1024 * 1024 * 1024),  # 磁盘总容量
+            "used": psutil.disk_usage("/").used / (1024 * 1024 * 1024),  # 磁盘已使用容量
+            "percent": psutil.disk_usage("/").percent,  # 磁盘使用百分比
         }
     }
 
@@ -349,7 +353,7 @@ async def get_config_file(request: Request, cfg_filename: str):
         raise HTTPException(status_code=400, detail="Bad request")
 
     try:
-        with open(cfg_file_path, 'r', encoding='UTF-8') as f:
+        with open(cfg_file_path, "r", encoding="UTF-8") as f:
             content = f.read()
         return {"message": "Success", "content": content}
     except FileNotFoundError:
@@ -374,7 +378,7 @@ async def edit_config_file(request: Request, cfg_filename: str):
     try:
         body = await request.json()
         content = body["content"]
-        with open(cfg_file_path, 'w', encoding='UTF-8') as f:
+        with open(cfg_file_path, "w", encoding="UTF-8") as f:
             f.write(content)
         return {"message": "Success"}
 
@@ -386,66 +390,53 @@ async def edit_config_file(request: Request, cfg_filename: str):
 @app.get("/api/target")
 @limiter.limit("2/second")
 async def get_target_list(request: Request):
-    target_list = BotDBUtil.TargetInfo.get_target_list()
-    target_list = [t for t in target_list if not t.targetId.startswith("TEST|")]
+    target_list = await TargetInfo.all()
+    target_list = [t for t in target_list if not t.target_id.startswith("TEST|")]
     return {"message": "Success", "targetList": target_list}
 
 
 @app.get("/api/target/{target_id}")
 @limiter.limit("2/second")
 async def get_target(request: Request, target_id: str):
-    target = BotDBUtil.TargetInfo(target_id)
-    if not target.query:
-        return HTTPException(status_code=404, detail="Not found")
-    enabled_modules = target.enabled_modules
-    is_muted = target.is_muted
-    custom_admins = target.custom_admins
-    locale = target.locale
-    options = target.get_option()
-
-    wiki_target = WikiTargetInfo(target_id)
-    wiki_headers = wiki_target.get_headers()
-    wiki_start_wiki = wiki_target.get_start_wiki()
-    wiki_interwikis = wiki_target.get_interwikis()
+    try:
+        target_info = await TargetInfo.get(target_id=target_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="not found")
 
     return {
         "targetId": target_id,
-        "enabledModules": enabled_modules,
-        "isMuted": is_muted,
-        "customAdmins": custom_admins,
-        "locale": locale,
-        "options": options,
-        "wiki": {
-            "headers": wiki_headers,
-            "startWiki": wiki_start_wiki,
-            "interwikis": wiki_interwikis,
-        },
+        "modules": target_info.modules,
+        "muted": target_info.muted,
+        "customAdmins": target_info.custom_admins,
+        "locale": target_info.locale,
+        "targetData": target_info.target_data
     }
 
 
 @app.get("/api/sender")
 @limiter.limit("2/second")
 async def get_sender_list(request: Request):
-    sender_list = BotDBUtil.SenderInfo.get_sender_list()
-    sender_list = [s for s in sender_list if not s.id.startswith("TEST|")]
-    return {"message": "Success", "senderList": sender_list}
+    sender_list = await SenderInfo.all()
+    sender_list = [s for s in sender_list if not s.sender_id.startswith("TEST|")]
+    return {"message": "Success", "targetList": sender_list}
 
 
 @app.get("/api/sender/{sender_id}")
 @limiter.limit("2/second")
 async def get_sender(request: Request, sender_id: str):
-    sender = BotDBUtil.SenderInfo(sender_id)
-    if not sender.query:
-        return HTTPException(status_code=404, detail="Not found")
+    try:
+        sender_info = await SenderInfo.get(sender_id=sender_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="not found")
 
     return {
         "senderId": sender_id,
-        "isInBlockList": sender.is_in_block_list,
-        "isInAllowList": sender.is_in_allow_list,
-        "isSuperUser": sender.is_super_user,
-        "warns": sender.warns,
-        "disableTyping": sender.disable_typing,
-        "petal": sender.petal,
+        "blocked": sender_info.blocked,
+        "trusted": sender_info.trusted,
+        "superUser": sender_info.superuser,
+        "warns": sender_info.warns,
+        "petal": sender_info.petal,
+        "senderData": sender_info.sender_data,
     }
 
 
@@ -458,15 +449,12 @@ async def get_module_list(request: Request):
 @app.get("/api/modules/{target_id}")
 @limiter.limit("2/second")
 async def get_target_modules(request: Request, target_id: str):
-    target_data = BotDBUtil.TargetInfo(target_id)
-    if not target_data.query:
-        return HTTPException(status_code=404, detail="Not found")
+    target_info = (await TargetInfo.get_or_create(target_id=target_id))[0]
     target_from = "|".join(target_id.split("|")[:-2])
     modules = ModulesManager.return_modules_list(target_from=target_from)
-    enabled_modules = target_data.enabled_modules
     return {
         "targetId": target_id,
-        "modules": {k: v for k, v in modules.items() if k in enabled_modules},
+        "modules": {k: v for k, v in modules.items() if k in target_info.modules},
     }
 
 
@@ -474,9 +462,8 @@ async def get_target_modules(request: Request, target_id: str):
 @limiter.limit("10/minute")
 async def enable_modules(request: Request, target_id: str):
     try:
-        target_data = BotDBUtil.TargetInfo(target_id)
-        if not target_data.query:
-            return HTTPException(status_code=404, detail="Not found")
+        verify_csrf_token(request)
+        target_info = (await TargetInfo.get_or_create(target_id=target_id))[0]
         target_from = "|".join(target_id.split("|")[:-2])
 
         body = await request.json()
@@ -487,8 +474,8 @@ async def enable_modules(request: Request, target_id: str):
             for m in modules
             if m in ModulesManager.return_modules_list(target_from=target_from)
         ]
-        target_data.enable(modules)
-        return {"message": "Success"}
+        await target_info.config_module(modules, True)
+        return {"message": "success"}
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -500,9 +487,8 @@ async def enable_modules(request: Request, target_id: str):
 @limiter.limit("10/minute")
 async def disable_modules(request: Request, target_id: str):
     try:
-        target_data = BotDBUtil.TargetInfo(target_id)
-        if not target_data.query:
-            return HTTPException(status_code=404, detail="Not found")
+        verify_csrf_token(request)
+        target_info = (await TargetInfo.get_or_create(target_id=target_id))[0]
         target_from = "|".join(target_id.split("|")[:-2])
 
         body = await request.json()
@@ -513,8 +499,8 @@ async def disable_modules(request: Request, target_id: str):
             for m in modules
             if m in ModulesManager.return_modules_list(target_from=target_from)
         ]
-        target_data.disable(modules)
-        return {"message": "Success"}
+        await target_info.config_module(modules, False)
+        return {"message": "success"}
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -544,8 +530,8 @@ async def websocket_logs(websocket: WebSocket):
         await websocket.send_text("\n".join(expanded_history))
 
     while True:
-        today_logs = glob.glob(f"{logs_path}/*_{datetime.today().strftime('%Y-%m-%d')}.log")
-        today_logs = [log for log in today_logs if 'console' not in os.path.basename(log)]
+        today_logs = glob.glob(f"{logs_path}/*_{datetime.today().strftime("%Y-%m-%d")}.log")
+        today_logs = [log for log in today_logs if "console" not in os.path.basename(log)]
 
         if today_logs:
             for log_file in today_logs:
@@ -553,7 +539,7 @@ async def websocket_logs(websocket: WebSocket):
                     current_line_count = 0
                     new_lines = []
 
-                    with open(log_file, 'r', encoding='utf-8') as f:
+                    with open(log_file, "r", encoding="utf-8") as f:
                         for i, line in enumerate(f):
                             if i >= last_file_line_count.get(log_file, 0):
                                 if line:
@@ -605,12 +591,12 @@ async def websocket_logs(websocket: WebSocket):
 
 
 def is_log_line_valid(line: str) -> bool:
-    log_pattern = r'^\[.+\]\[[a-zA-Z0-9\._]+:[a-zA-Z0-9\._]+:\d+\]\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\[[A-Z]+\]:'
+    log_pattern = r"^\[.+\]\[[a-zA-Z0-9\._]+:[a-zA-Z0-9\._]+:\d+\]\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\[[A-Z]+\]:"
     return bool(re.match(log_pattern, line))
 
 
 def extract_timestamp(log_line: str):
-    log_time_pattern = r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+    log_time_pattern = r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]"
     match = re.search(log_time_pattern, log_line)
     if match:
         return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")

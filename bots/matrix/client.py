@@ -7,13 +7,9 @@ from core.config import Config
 from core.constants.default import matrix_homeserver_default, matrix_user_default
 from core.logger import Logger
 
-homeserver = Config(
-    "matrix_homeserver", matrix_homeserver_default, table_name="bot_matrix"
-)
+homeserver = Config("matrix_homeserver", matrix_homeserver_default, table_name="bot_matrix")
 user = Config("matrix_user", matrix_user_default, table_name="bot_matrix")
-device_id = Config(
-    "matrix_device_id", cfg_type=str, secret=True, table_name="bot_matrix"
-)
+device_id = Config("matrix_device_id", cfg_type=str, secret=True, table_name="bot_matrix")
 device_name = Config("matrix_device_name", cfg_type=str, table_name="bot_matrix")
 token = Config("matrix_token", cfg_type=str, secret=True, table_name="bot_matrix")
 megolm_backup_passphrase = Config(
@@ -22,6 +18,7 @@ megolm_backup_passphrase = Config(
     secret=True,
     table_name="bot_matrix",
 )
+proxy = Config("proxy", cfg_type=str, secret=True)
 
 store_path = os.path.abspath("./matrix_store")
 store_path_nio = os.path.join(store_path, "nio")
@@ -53,6 +50,7 @@ if homeserver and user and device_id and token:
         user,
         store_path=store_path_nio,
         config=AsyncClientConfig(store_sync_tokens=True),
+        proxy=proxy
     )
     bot.restore_login(user, device_id, token)
     if bot.olm:

@@ -2,7 +2,7 @@ import re
 
 import httpx
 
-from core.builtins import Bot
+from core.builtins import Bot, I18NContext
 from core.component import module
 from .bili_api import get_video_info
 
@@ -30,8 +30,9 @@ async def _(msg: Bot.MessageSession, bid: str, get_detail=False):
     elif bid[:2].upper() == "AV":
         query = f"?aid={bid[2:]}"
     else:
-        return await msg.finish(msg.locale.t("bilibili.message.invalid"))
-    await get_video_info(msg, query, get_detail)
+        return await msg.finish(I18NContext("bilibili.message.invalid"))
+    output = await get_video_info(msg, query, get_detail)
+    await msg.finish(output)
 
 
 @bili.regex(r"av(\d+)\b", flags=re.I, mode="A", desc="{bilibili.help.regex.av}")
@@ -40,7 +41,8 @@ async def _(msg: Bot.MessageSession):
     for video in matched:
         if video:
             query = f"?aid={video}"
-            await get_video_info(msg, query)
+            output = await get_video_info(msg, query)
+            await msg.send_message(output)
 
 
 @bili.regex(r"BV[a-zA-Z0-9]{10}", mode="A", desc="{bilibili.help.regex.bv}")
@@ -49,10 +51,11 @@ async def _(msg: Bot.MessageSession):
     for video in matched:
         if video:
             query = f"?bvid={video}"
-            await get_video_info(msg, query)
+            output = await get_video_info(msg, query)
+            await msg.send_message(output)
 
 
-@bili.regex(r"(?:http[s]?://)?(?:bili(?:22|33|2233)\.cn|b23\.tv)/([A-Za-z0-9]{7})(?:/.*?|)",
+@bili.regex(r"(?:http[s]?:\/\/)?(?:bili(?:22|33|2233)\.cn|b23\.tv)\/([A-Za-z0-9]{7})(?:\/.*?|)",
             mode="A",
             desc="{bilibili.help.regex.url}",
             show_typing=False,
@@ -65,7 +68,8 @@ async def _(msg: Bot.MessageSession):
             query = await parse_shorturl(f"https://b23.tv/{video}")
             if not query:
                 return
-            await get_video_info(msg, query)
+            output = await get_video_info(msg, query)
+            await msg.send_message(output)
 
 
 async def parse_shorturl(shorturl):

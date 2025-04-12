@@ -1,3 +1,8 @@
+"""基于`httpx`的互联网请求工具，用于让机器人请求外部网站。
+
+请勿在模块中导入`request`库，否则会导致阻塞问题。
+"""
+
 import os
 import re
 import socket
@@ -20,7 +25,7 @@ debug = Config("debug", False)
 proxy = Config("proxy", cfg_type=str, secret=True)
 
 url_pattern = re.compile(
-    r"\b(?:http[s]?://)?(?:[a-zA-Z0-9\-\:_@]+\.)+[a-zA-Z]{2,}(?:/[a-zA-Z0-9-._~:/?#[\]@!$&\'()*+,;=%]*)?\b"
+    r"\b(?:http[s]?:\/\/)?(?:[a-zA-Z0-9\-\:_@]+\.)+[a-zA-Z]{2,}(?:\/[a-zA-Z0-9-._~:\/?#[\]@!$&\'()*+,;=%]*)?\b"
 )
 
 _matcher_private_ips = re.compile(

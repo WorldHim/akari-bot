@@ -8,7 +8,7 @@ from core.constants.exceptions import ConfigValueError
 from core.utils.http import get_url
 from core.utils.text import isfloat
 
-api_key = Config("exchange_rate_api_key", cfg_type=str, secret=True)
+api_key = Config("exchange_rate_api_key", cfg_type=str, secret=True, table_name="module_exchange_rate")
 
 excr = module(
     "exchange_rate",
@@ -28,7 +28,7 @@ async def _(msg: Bot.MessageSession, base: str, target: str):
     base_currency = base[-3:]
 
     if not api_key:
-        raise ConfigValueError(msg.locale.t("error.config.secret.not_found"))
+        raise ConfigValueError("[I18N:error.config.secret.not_found]")
 
     try:
         amount = amount if amount else 1
@@ -57,7 +57,7 @@ async def exchange(msg: Bot.MessageSession, base_currency, target_currency, amou
             unsupported_currencies.append(target_currency)
         if unsupported_currencies:
             await msg.finish(
-                f"{msg.locale.t('exchange_rate.message.invalid.unit')}{' '.join(unsupported_currencies)}"
+                f"{msg.locale.t("exchange_rate.message.invalid.unit")}{" ".join(unsupported_currencies)}"
             )
 
     url = f"https://v6.exchangerate-api.com/v6/{api_key}/pair/{base_currency}/{target_currency}/{amount}"

@@ -5,10 +5,9 @@ import random
 import re
 import traceback
 from pathlib import Path
-from typing import List, Union, Optional, Dict
+from typing import List, Union, Optional
 
 import aiocqhttp.exceptions
-import orjson as json
 from aiocqhttp import MessageSegment
 from tenacity import retry, wait_fixed, stop_after_attempt
 
@@ -34,7 +33,7 @@ from core.builtins.message.chain import MessageChain
 from core.builtins.message.elements import MentionElement, PlainElement, ImageElement, VoiceElement
 from core.config import Config
 from core.constants.exceptions import SendMessageFailed
-from core.database import BotDBUtil
+from core.database.models import AnalyticsData, TargetInfo
 from core.logger import Logger
 from core.utils.image import msgchain2image
 from core.utils.storedata import get_stored_list
@@ -70,9 +69,7 @@ async def resending_group_message():
             for x in targets:
                 try:
                     if x["i18n"]:
-                        await x["fetch"].send_direct_message(
-                            x["fetch"].parent.locale.t(x["message"], **x["kwargs"])
-                        )
+                        await x["fetch"].send_direct_message(I18NContext(x["message"], **x["kwargs"]))
                     else:
                         await x["fetch"].send_direct_message(x["message"])
                     Temp.data["waiting_for_send_group_message"].remove(x)
@@ -90,9 +87,7 @@ async def resending_group_message():
             fetch_base_superuser = await FetchTarget.fetch_target(bu)
             if fetch_base_superuser:
                 await fetch_base_superuser.send_direct_message(
-                    fetch_base_superuser.parent.locale.t(
-                        "error.message.paused", prefix=command_prefix[0]
-                    )
+                    I18NContext("error.message.paused", disable_joke=True, prefix=command_prefix[0])
                 )
 
 
@@ -330,7 +325,7 @@ class MessageSession(MessageSessionT):
                     m.append(item["data"]["text"])
             else:
                 if item["type"] == "at":
-                    m.append(rf'{sender_prefix}|{item["data"]["qq"]}')
+                    m.append(rf"{sender_prefix}|{item["data"]["qq"]}")
                 elif item["type"] == "json":
                     m.append(
                         html.unescape(str(item["data"]["data"])).replace("\\/", "/")
@@ -344,11 +339,9 @@ class MessageSession(MessageSessionT):
 
     async def fake_forward_msg(self, nodelist):
         if self.target.target_from == target_group_prefix:
-            get_ = get_stored_list(Bot.FetchTarget, "forward_msg")
-            if isinstance(get_, dict) and get_.get("status"):
-                await self.send_message(
-                    self.locale.t("core.message.forward_msg.disabled")
-                )
+            get_ = await get_stored_list(Bot.FetchTarget, "forward_msg")
+            if isinstance(get_[0], dict) and get_[0].get("status"):
+                await self.send_message(I18NContext("core.message.forward_msg.disabled"))
                 raise ValueError
             await bot.call_action(
                 "send_group_forward_msg",
@@ -357,8 +350,8 @@ class MessageSession(MessageSessionT):
             )
         elif self.target.target_from == target_private_prefix:
             await bot.call_action(
-                'send_private_forward_msg',
-                user_id=int(self.target.sender_id.split('|')[1]),
+                "send_private_forward_msg",
+                user_id=int(self.target.sender_id.split("|")[1]),
                 messages=nodelist
             )
 
@@ -369,11 +362,11 @@ class MessageSession(MessageSessionT):
     ) -> List[dict]:
         node_list = []
         for message in msg_chain_list:
-            content = ''
+            content = ""
             msgchain = message.as_sendable()
             for x in msgchain:
                 if isinstance(x, PlainElement):
-                    content += x.text + '\n'
+                    content += x.text + "\n"
                 elif isinstance(x, ImageElement):
                     content += f"[CQ:image,file=base64://{x.get_base64()}]\n"
 
@@ -411,7 +404,7 @@ class MessageSession(MessageSessionT):
         lst = []
         for m in get_channels_info:
             if m["channel_type"] == 1:
-                lst.append(f'{m["owner_guild_id"]}|{m["channel_id"]}')
+                lst.append(f"{m["owner_guild_id"]}|{m["channel_id"]}")
         return lst
 
     async def to_message_chain(self):
@@ -439,7 +432,7 @@ class MessageSession(MessageSessionT):
                         elif cq_data["type"] == "record":
                             lst.append(Voice(cq_data["data"].get("file")))
                         elif cq_data["type"] == "at":
-                            lst.append(Mention(f"{sender_prefix}|{cq_data['data'].get('qq')}"))
+                            lst.append(Mention(f"{sender_prefix}|{cq_data["data"].get("qq")}"))
                         else:
                             lst.append(Plain(s))
                     else:
@@ -459,7 +452,7 @@ class MessageSession(MessageSessionT):
                 elif item["type"] == "record":
                     lst.append(Voice(item["data"]["file"]))
                 elif item["type"] == "at":
-                    lst.append(Mention(f"{sender_prefix}|{cq_data['data'].get('qq')}"))
+                    lst.append(Mention(f"{sender_prefix}|{item["data"].get("qq")}"))
                 else:
                     lst.append(Plain(CQCodeHandler.generate_cq(item)))
 
@@ -532,8 +525,9 @@ class FetchTarget(FetchTargetT):
                     sender_id = match_sender.group(2)
             else:
                 sender_id = target_id
-
-            return Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
+            session = Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
+            await session.parent.data_init()
+            return session
 
     @staticmethod
     async def fetch_target_list(target_list) -> List[Bot.FetchedSession]:
@@ -553,7 +547,7 @@ class FetchTarget(FetchTargetT):
             for channel in get_channel_list:
                 if channel["channel_type"] == 1:
                     guild_list.append(
-                        f"{str(g['guild_id'])}|{str(channel['channel_id'])}"
+                        f"{str(g["guild_id"])}|{str(channel["channel_id"])}"
                     )
         for f in friend_list_raw:
             friend_list.append(f)
@@ -598,9 +592,7 @@ class FetchTarget(FetchTargetT):
                     msgchain = message
                     if isinstance(message, str):
                         if i18n:
-                            msgchain = MessageChain(
-                                [Plain(fetch_.parent.locale.t(message, **kwargs))]
-                            )
+                            msgchain = MessageChain([I18NContext(message, **kwargs)])
                         else:
                             msgchain = MessageChain([Plain(message)])
                     msgchain = MessageChain(msgchain)
@@ -614,10 +606,14 @@ class FetchTarget(FetchTargetT):
                     if _tsk:
                         _tsk = []
                 if enable_analytics and module_name:
-                    BotDBUtil.Analytics(fetch_).add("", module_name, "schedule")
+                    await AnalyticsData.create(target_id=fetch_.target.target_id,
+                                               sender_id=fetch_.target.sender_id,
+                                               command="",
+                                               module_name=module_name,
+                                               module_type="schedule")
                 await asyncio.sleep(0.5)
             except SendMessageFailed as e:
-                if e.args[0] == "send group message failed: blocked by server":
+                if str(e).startswith("send group message failed: blocked by server"):
                     if len(_tsk) >= 3:
                         blocked = True
                     if not blocked:
@@ -647,9 +643,7 @@ class FetchTarget(FetchTargetT):
                             fetch_base_superuser = await FetchTarget.fetch_target(bu)
                             if fetch_base_superuser:
                                 await fetch_base_superuser.send_direct_message(
-                                    fetch_base_superuser.parent.locale.t(
-                                        "error.message.paused", prefix=command_prefix[0]
-                                    )
+                                    I18NContext("error.message.paused", disable_joke=True, prefix=command_prefix[0])
                                 )
             except Exception:
                 Logger.error(traceback.format_exc())
@@ -658,7 +652,7 @@ class FetchTarget(FetchTargetT):
             for x in user_list:
                 await post_(x)
         else:
-            get_target_id = BotDBUtil.TargetInfo.get_target_list(
+            get_target_id = await TargetInfo.get_target_list_by_module(
                 module_name, client_name
             )
             group_list_raw = await bot.call_action("get_group_list")
@@ -680,7 +674,7 @@ class FetchTarget(FetchTargetT):
                         for channel in get_channel_list:
                             if channel["channel_type"] == 1:
                                 guild_list.append(
-                                    f"{str(g['guild_id'])}|{str(channel['channel_id'])}"
+                                    f"{str(g["guild_id"])}|{str(channel["channel_id"])}"
                                 )
                     except Exception:
                         traceback.print_exc()
@@ -689,7 +683,7 @@ class FetchTarget(FetchTargetT):
             in_whitelist = []
             else_ = []
             for x in get_target_id:
-                fetch = await FetchTarget.fetch_target(x.targetId)
+                fetch = await FetchTarget.fetch_target(x.target_id)
                 Logger.debug(fetch)
                 if fetch:
                     if fetch.target.target_from == target_group_prefix:
@@ -701,7 +695,7 @@ class FetchTarget(FetchTargetT):
                     if fetch.target.target_from == target_guild_prefix:
                         if fetch.session.target not in guild_list:
                             continue
-                    if BotDBUtil.TargetInfo(fetch.target.target_id).is_muted:
+                    if x.muted:
                         continue
 
                     if fetch.target.target_from in [
@@ -710,7 +704,7 @@ class FetchTarget(FetchTargetT):
                     ]:
                         in_whitelist.append(post_(fetch))
                     else:
-                        load_options: dict = json.loads(x.options)
+                        load_options: dict = x.target_data
                         if load_options.get("in_post_whitelist", False):
                             in_whitelist.append(post_(fetch))
                         else:

@@ -13,7 +13,7 @@ from core.builtins import Bot, Plain, Image, Voice, MessageSession as MessageSes
 from core.builtins.message.chain import MessageChain
 from core.builtins.message.elements import PlainElement, ImageElement, VoiceElement, MentionElement
 from core.config import Config
-from core.database import BotDBUtil
+from core.database.models import AnalyticsData, TargetInfo
 from core.logger import Logger
 from core.utils.image import image_split
 
@@ -75,8 +75,8 @@ class MessageSession(MessageSessionT):
                         # https://spec.matrix.org/v1.9/client-server-api/#fallbacks-for-rich-replies
                         # todo: standardize fallback for m.image, m.video, m.audio, and m.file
                         reply_to_type = self.session.message["content"]["msgtype"]
-                        content["body"] = (f">{' *' if reply_to_type == 'm.emote' else ''} <{self.session.sender}> {
-                            self.session.message['content']['body']}\n\n{x.text}")
+                        content["body"] = (f">{" *" if reply_to_type == "m.emote" else ""} <{self.session.sender}> {
+                                           self.session.message["content"]["body"]}\n\n{x.text}")
                         content["format"] = "org.matrix.custom.html"
                         html_text = x.text
                         html_text = html_text.replace("<", "&lt;").replace(">", "&gt;")
@@ -84,10 +84,10 @@ class MessageSession(MessageSessionT):
                         content["formatted_body"] = (
                             f"<mx-reply><blockquote><a href=\"https://matrix.to/#/{
                                 self.session.target}/{reply_to}?via={homeserver_host}\">In reply to</a>{
-                                ' *' if reply_to_type == 'm.emote' else ''} <a href=\"https://matrix.to/#/{
+                                " *" if reply_to_type == "m.emote" else ""} <a href=\"https://matrix.to/#/{
                                 self.session.sender}\">{
                                 self.session.sender}</a><br/>{
-                                self.session.message['content']['body']}</blockquote></mx-reply>{html_text}")
+                                self.session.message["content"]["body"]}</blockquote></mx-reply>{html_text}")
 
                 if (
                     self.session.message
@@ -293,7 +293,7 @@ class MessageSession(MessageSessionT):
                 url = str(content["url"])
             elif "file" in content:
                 # todo: decrypt image
-                # url = str(content['file']['url'])
+                # url = str(content["file"]["url"])
                 return MessageChain([])
             else:
                 Logger.error(f"Got invalid m.image message from {self.session.target}")
@@ -375,13 +375,13 @@ class FetchTarget(FetchedTargetT):
 
     @staticmethod
     async def fetch_target(target_id, sender_id=None) -> Union[Bot.FetchedSession]:
-        target_pattern = r'|'.join(re.escape(item) for item in target_prefix_list)
+        target_pattern = r"|".join(re.escape(item) for item in target_prefix_list)
         match_target = re.match(fr"^({target_pattern})\|(.*)", target_id)
         if match_target:
             target_from = sender_from = match_target.group(1)
             target_id = match_target.group(2)
             if sender_id:
-                sender_pattern = r'|'.join(re.escape(item) for item in sender_prefix_list)
+                sender_pattern = r"|".join(re.escape(item) for item in sender_prefix_list)
                 match_sender = re.match(fr"^({sender_pattern})\|(.*)", sender_id)
                 if match_sender:
                     sender_from = match_sender.group(1)
@@ -389,6 +389,7 @@ class FetchTarget(FetchedTargetT):
             else:
                 sender_id = target_id
             session = Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
+            await session.parent.data_init()
             await session._resolve_matrix_room_()
             return session
 
@@ -403,40 +404,48 @@ class FetchTarget(FetchedTargetT):
 
     @staticmethod
     async def post_message(module_name, message, user_list=None, i18n=False, **kwargs):
-        module_name = None if module_name == '*' else module_name
+        module_name = None if module_name == "*" else module_name
         if user_list:
             for x in user_list:
                 try:
                     msgchain = message
                     if isinstance(message, str):
                         if i18n:
-                            msgchain = MessageChain([Plain(x.parent.locale.t(message, **kwargs))])
+                            msgchain = MessageChain([I18NContext(message, **kwargs)])
                         else:
                             msgchain = MessageChain([Plain(message)])
                     msgchain = MessageChain(msgchain)
                     await x.send_direct_message(msgchain)
                     if enable_analytics and module_name:
-                        BotDBUtil.Analytics(x).add("", module_name, "schedule")
+                        await AnalyticsData.create(target_id=x.target.target_id,
+                                                   sender_id=x.target.sender_id,
+                                                   command="",
+                                                   module_name=module_name,
+                                                   module_type="schedule")
                 except Exception:
                     Logger.error(traceback.format_exc())
         else:
-            get_target_id = BotDBUtil.TargetInfo.get_target_list(module_name, client_name)
+            get_target_id = await TargetInfo.get_target_list_by_module(module_name, client_name)
             for x in get_target_id:
-                fetch = await FetchTarget.fetch_target(x.targetId)
+                fetch = await FetchTarget.fetch_target(x.target_id)
                 if fetch:
-                    if BotDBUtil.TargetInfo(fetch.target.target_id).is_muted:
+                    if x.muted:
                         continue
                     try:
                         msgchain = message
                         if isinstance(message, str):
                             if i18n:
-                                msgchain = MessageChain([Plain(fetch.parent.locale.t(message, **kwargs))])
+                                msgchain = MessageChain([I18NContext(message, **kwargs)])
                             else:
                                 msgchain = MessageChain([Plain(message)])
                         msgchain = MessageChain(msgchain)
                         await fetch.send_direct_message(msgchain)
                         if enable_analytics and module_name:
-                            BotDBUtil.Analytics(fetch).add("", module_name, "schedule")
+                            await AnalyticsData.create(target_id=fetch.target.target_id,
+                                                       sender_id=fetch.target.sender_id,
+                                                       command="",
+                                                       module_name=module_name,
+                                                       module_type="schedule")
                     except Exception:
                         Logger.error(traceback.format_exc())
 

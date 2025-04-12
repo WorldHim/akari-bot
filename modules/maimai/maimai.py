@@ -1,7 +1,7 @@
 from core.builtins import Image as BImage
 from core.component import module
 from core.utils.text import isint
-from .dbutils import DivingProberBindInfoManager
+from modules.maimai.database.models import DivingProberBindInfo
 from .libraries.maimaidx_apidata import get_alias, get_info, search_by_alias, update_alias, update_cover
 from .libraries.maimaidx_best50 import generate as generate_b50
 from .libraries.maimaidx_platelist import generate as generate_plate
@@ -77,7 +77,7 @@ async def _(msg: Bot.MessageSession, constant: float, constant_max: float = None
     end_index = page * SONGS_PER_PAGE
 
     for elem in result_set[start_index:end_index]:
-        s += f"{elem[0]} - {elem[1]}{' (DX)' if elem[5] == 'DX' else ''} {elem[3]} {elem[4]} ({elem[2]})\n"
+        s += f"{elem[0]} - {elem[1]}{" (DX)" if elem[5] == "DX" else ""} {elem[3]} {elem[4]} ({elem[2]})\n"
     if len(result_set) == 0:
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
     elif len(result_set) <= SONGS_PER_PAGE:
@@ -126,7 +126,7 @@ async def _(msg: Bot.MessageSession, level: str):
 
     s = msg.locale.t("maimai.message.level", level=level) + "\n"
     for elem in result_set[start_index:end_index]:
-        s += f"{elem[0]} - {elem[1]}{' (DX)' if elem[5] == 'DX' else ''} {elem[3]} {elem[4]} ({elem[2]})\n"
+        s += f"{elem[0]} - {elem[1]}{" (DX)" if elem[5] == "DX" else ""} {elem[3]} {elem[4]} ({elem[2]})\n"
 
     if len(result_set) == 0:
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
@@ -165,7 +165,7 @@ async def _(msg: Bot.MessageSession):
 
     s = msg.locale.t("maimai.message.new") + "\n"
     for elem in result_set[start_index:end_index]:
-        s += f"{elem[0]} - {elem[1]}{' (DX)' if elem[2] == 'DX' else ''}\n"
+        s += f"{elem[0]} - {elem[1]}{" (DX)" if elem[2] == "DX" else ""}\n"
 
     if len(result_set) == 0:
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
@@ -208,7 +208,7 @@ async def _(msg: Bot.MessageSession, keyword: str):
 
     s = msg.locale.t("maimai.message.search", keyword=name) + "\n"
     for elem in result_set[start_index:end_index]:
-        s += f"{elem[0]} - {elem[1]}{' (DX)' if elem[2] == 'DX' else ''}\n"
+        s += f"{elem[0]} - {elem[1]}{" (DX)" if elem[2] == "DX" else ""}\n"
     if len(data) <= SONGS_PER_PAGE:
         await msg.finish(s.strip())
     else:
@@ -236,7 +236,7 @@ async def _(msg: Bot.MessageSession, sid: str):
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
 
     title = (
-        f"{music['id']} - {music['title']}{' (DX)' if music['type'] == 'DX' else ''}"
+        f"{music["id"]} - {music["title"]}{" (DX)" if music["type"] == "DX" else ""}"
     )
     alias = await get_alias(msg, sid)
     if len(alias) == 0:
@@ -255,16 +255,14 @@ async def _(msg: Bot.MessageSession, grade: str):
 @mai.command("bind <username> {{maimai.help.bind}}", exclude_from=["QQ|Private", "QQ|Group"])
 async def _(msg: Bot.MessageSession, username: str):
     await get_record(msg, {"username": username}, use_cache=False)
-    bind = DivingProberBindInfoManager(msg).set_bind_info(username=username)
-    if bind:
-        await msg.finish(msg.locale.t("maimai.message.bind.success") + username)
+    await DivingProberBindInfo.set_bind_info(sender_id=msg.target.sender_id, username=username)
+    await msg.finish(msg.locale.t("maimai.message.bind.success") + username)
 
 
 @mai.command("unbind {{maimai.help.unbind}}", exclude_from=["QQ|Private", "QQ|Group"])
 async def _(msg: Bot.MessageSession):
-    unbind = DivingProberBindInfoManager(msg).remove_bind_info()
-    if unbind:
-        await msg.finish(msg.locale.t("maimai.message.unbind.success"))
+    await DivingProberBindInfo.remove_bind_info(sender_id=msg.target.sender_id)
+    await msg.finish(msg.locale.t("maimai.message.unbind.success"))
 
 
 @mai.command("b50 [<username>] {{maimai.help.b50}}")
@@ -273,11 +271,12 @@ async def _(msg: Bot.MessageSession, username: str = None):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender, "b50": True}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username, "b50": True}
         use_cache = True
     else:
@@ -301,7 +300,7 @@ async def _(msg: Bot.MessageSession, id_or_alias: str):
             for sid in sorted(sid_list, key=int):
                 s = (await total_list.get()).by_id(sid)
                 if s:
-                    res += f"{s['id']} - {s['title']}{' (DX)' if s['type'] == 'DX' else ''}\n"
+                    res += f"{s["id"]} - {s["title"]}{" (DX)" if s["type"] == "DX" else ""}\n"
             res += msg.locale.t("maimai.message.chart.prompt", prefix=msg.prefixes[0])
             await msg.finish(res)
         else:
@@ -315,7 +314,7 @@ async def _(msg: Bot.MessageSession, id_or_alias: str):
         with open(mai_utage_info_path, "r", encoding="utf-8") as file:
             utage_data = json.loads(file.read())
 
-        res.append(f"「{utage_data[sid]['comment']}」")
+        res.append(f"「{utage_data[sid]["comment"]}」")
         if utage_data[sid]["referrals_num"]["mode"] == "normal":
             chart = utage_data[sid]["charts"][0]
             res.append(
@@ -410,7 +409,7 @@ async def _(msg: Bot.MessageSession, id_or_alias: str):
             for sid in sorted(sid_list, key=int):
                 s = (await total_list.get()).by_id(sid)
                 if s:
-                    res += f"{s['id']} - {s['title']}{' (DX)' if s['type'] == 'DX' else ''}\n"
+                    res += f"{s["id"]} - {s["title"]}{" (DX)" if s["type"] == "DX" else ""}\n"
             res += msg.locale.t("maimai.message.song.prompt", prefix=msg.prefixes[0])
             await msg.finish(res)
         else:
@@ -420,17 +419,21 @@ async def _(msg: Bot.MessageSession, id_or_alias: str):
         await msg.finish(msg.locale.t("maimai.message.music_not_found"))
 
     if int(sid) > 100000:
+        res = []
         with open(mai_utage_info_path, "r", encoding="utf-8") as file:
             utage_data = json.loads(file.read())
+        if utage_data:
+            res.append(f"「{utage_data[sid]["comment"]}」")
 
-        res = msg.locale.t(
-            "maimai.message.song.utage",
-            comment=utage_data[sid]["comment"],
-            artist=utage_data[sid]["artist"],
-            bpm=utage_data[sid]["bpm"],
+        res.append(msg.locale.t(
+            "maimai.message.song",
+            artist=music[sid]["artist"],
+            genre="宴會場",
+            bpm=music["basic_info"]["bpm"],
             version=music["basic_info"]["from"],
-            level=utage_data[sid]["level"][0],
-        )
+            level=music["basic_info"]["level"][0]
+        ))
+        res = "\n".join(res)
     else:
         res = msg.locale.t(
             "maimai.message.song",
@@ -446,16 +449,16 @@ async def _(msg: Bot.MessageSession, id_or_alias: str):
 
 
 @mai.command(
-    "info <id_or_alias> [-u <username>] {{maimai.help.info}}",
+    "score <id_or_alias> [-u <username>] {{maimai.help.score}}",
     options_desc={"-u": "{maimai.help.option.u}"},
 )
 async def _(msg: Bot.MessageSession, id_or_alias: str):
     get_user = msg.parsed_msg.get("-u", False)
     username = get_user["<username>"] if get_user else None
-    await query_song_info(msg, id_or_alias, username)
+    await query_song_score(msg, id_or_alias, username)
 
 
-async def query_song_info(msg, query, username):
+async def query_song_score(msg, query, username):
     if query[:2].lower() == "id":
         sid = query[2:]
     else:
@@ -468,8 +471,8 @@ async def query_song_info(msg, query, username):
             for sid in sorted(sid_list, key=int):
                 s = (await total_list.get()).by_id(sid)
                 if s:
-                    res += f"{s['id']} - {s['title']}{' (DX)' if s['type'] == 'DX' else ''}\n"
-            res += msg.locale.t("maimai.message.info.prompt", prefix=msg.prefixes[0])
+                    res += f"{s["id"]} - {s["title"]}{" (DX)" if s["type"] == "DX" else ""}\n"
+            res += msg.locale.t("maimai.message.score.prompt", prefix=msg.prefixes[0])
             await msg.finish(res)
         else:
             sid = str(sid_list[0])
@@ -482,11 +485,12 @@ async def query_song_info(msg, query, username):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username}
         use_cache = True
     else:
@@ -509,11 +513,12 @@ async def query_plate(msg, plate, username, get_list=False):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username}
         use_cache = True
     else:
@@ -552,11 +557,12 @@ async def query_process(msg, level, goal, username):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username}
         use_cache = True
     else:
@@ -589,11 +595,12 @@ async def _(msg: Bot.MessageSession, username: str = None):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username}
         use_cache = True
     else:
@@ -616,11 +623,12 @@ async def _(msg: Bot.MessageSession, level: str):
         if msg.target.sender_from == "QQ":
             payload = {"qq": msg.session.sender}
         else:
-            username = DivingProberBindInfoManager(msg).get_bind_username()
-            if not username:
+            bind_info = await DivingProberBindInfo.get_or_none(sender_id=msg.target.sender_id)
+            if not bind_info:
                 await msg.finish(
                     msg.locale.t("maimai.message.user_unbound", prefix=msg.prefixes[0])
                 )
+            username = bind_info.username
             payload = {"username": username}
         use_cache = True
     else:
@@ -681,7 +689,7 @@ async def _(msg: Bot.MessageSession, dx_type: str = None):
         else:
             music = music_data.random()
             await msg.finish(
-                await get_info(music, Plain(f"{'/'.join(str(ds) for ds in music.ds)}"))
+                await get_info(music, Plain(f"{"/".join(str(ds) for ds in music.ds)}"))
             )
     except (ValueError, TypeError):
         await msg.finish(msg.locale.t("maimai.message.random.failed"))
@@ -691,7 +699,7 @@ async def _(msg: Bot.MessageSession, dx_type: str = None):
 async def _(msg: Bot.MessageSession):
     music = (await total_list.get()).random()
     await msg.finish(
-        await get_info(music, Plain(f"{'/'.join(str(ds) for ds in music.ds)}"))
+        await get_info(music, Plain(f"{"/".join(str(ds) for ds in music.ds)}"))
     )
 
 
@@ -735,8 +743,8 @@ async def _(msg: Bot.MessageSession, diff: str, sid: str, score: float):
         )
         b2t_2000_great_prop = f"{(break_2000_reduce / total_score * 100):.4f}"
         await msg.finish(
-            f"""{music['title']}{' (DX)' if music['type'] == 'DX' else ''} {diff_list[diff_index]}
-{msg.locale.t('maimai.message.scoreline',
+            f"""{music["title"]}{" (DX)" if music["type"] == "DX" else ""} {diff_list[diff_index]}
+{msg.locale.t("maimai.message.scoreline",
               scoreline=score,
               tap_great=tap_great,
               tap_great_prop=tap_great_prop,
