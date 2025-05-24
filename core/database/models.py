@@ -115,6 +115,7 @@ class TargetInfo(DBModel):
     :param locale: 会话语言。
     :param modules: 会话内可用模块。
     :param custom_admins: 会话内自定义管理员列表。
+    :param ban_user: 会话内已限制用户。
     :param target_data: 会话数据。
     """
     target_id = fields.CharField(max_length=512, pk=True)
@@ -123,6 +124,7 @@ class TargetInfo(DBModel):
     locale = fields.CharField(max_length=32, default=default_locale)
     modules = fields.JSONField(default=[])
     custom_admins = fields.JSONField(default=[])
+    banned_users = fields.JSONField(default=[])
     target_data = fields.JSONField(default={})
 
     class Meta:
@@ -139,10 +141,11 @@ class TargetInfo(DBModel):
         for mname in module_names:
             if enable:
                 if mname not in self.modules:
-                    self.modules += module_names
+                    self.modules.append(mname)
             else:
                 if mname in self.modules:
-                    self.modules += module_names
+                    self.modules.remove(mname)
+        self.modules = list(set(self.modules))
         await self.save()
         return True
 
@@ -186,6 +189,23 @@ class TargetInfo(DBModel):
         else:
             if sender_id in custom_admins:
                 custom_admins.remove(sender_id)
+        await self.save()
+        return True
+
+    async def config_banned_user(self, sender_id: str, enable: bool = True) -> bool:
+        """
+        设置会话内被限制用户。
+
+        :param sender_id: 指定的用户 ID。
+        :param enable: 是否要设置会话内用户限制使用机器人，若 False 则取消限制。
+        """
+        banned_users = self.banned_users
+        if enable:
+            if sender_id not in banned_users:
+                banned_users.append(sender_id)
+        else:
+            if sender_id in banned_users:
+                banned_users.remove(sender_id)
         await self.save()
         return True
 
@@ -235,7 +255,7 @@ class AnalyticsData(DBModel):
     module_name = fields.CharField(max_length=512)
     module_type = fields.CharField(max_length=512)
     target_id = fields.CharField(max_length=512)
-    sender_id = fields.CharField(max_length=512)
+    sender_id = fields.CharField(max_length=512, null=True, default=None)
     command = fields.TextField()
     timestamp = fields.DatetimeField(auto_now_add=True)
 
@@ -248,6 +268,13 @@ class AnalyticsData(DBModel):
         if module_name is not None:
             query = query.filter(module_name=module_name)
         return await query.all()
+
+    @classmethod
+    async def get_values_by_times(cls, new, old, module_name=None):
+        query = cls.filter(timestamp__gte=old, timestamp__lte=new)
+        if module_name is not None:
+            query = query.filter(module_name=module_name)
+        return await query.values()
 
     @classmethod
     async def get_count_by_times(cls, new, old, module_name=None):
@@ -391,12 +418,26 @@ class JobQueuesTable(DBModel):
         ).all()
 
 
-__all__ = [
-    "SenderInfo",
-    "TargetInfo",
-    "StoredData",
-    "AnalyticsData",
-    "DBVersion",
-    "UnfriendlyActionRecords",
-    "JobQueuesTable"
-]
+class MaliciousLoginRecords(DBModel):
+    """
+    恶意登录行为记录。
+
+    :param target_id: 会话 ID。
+    :param sender_id: 用户 ID。
+    :param action: 行为类型。
+    :param detail: 行为详情。
+    :param timestamp: 时间戳。
+    """
+    id = fields.IntField(pk=True)
+    ip_address = fields.CharField(max_length=45)
+    blocked_until = fields.DatetimeField()
+    created_date = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "malicious_login"
+
+    @classmethod
+    async def check_blocked(cls, ip_address: str) -> bool:
+        return await cls.filter(
+            ip_address=ip_address, blocked_until__gt=datetime.now(UTC)
+        ).exists()

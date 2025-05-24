@@ -6,8 +6,6 @@ from typing import List, Union
 import discord
 import filetype
 
-from bots.discord.client import client
-from bots.discord.info import *
 from core.builtins import (
     Bot,
     Plain,
@@ -30,6 +28,8 @@ from core.config import Config
 from core.database.models import AnalyticsData, TargetInfo
 from core.logger import Logger
 from core.utils.http import download
+from .client import client
+from .info import *
 
 enable_analytics = Config("enable_analytics", False)
 
@@ -269,8 +269,9 @@ class FetchTarget(FetchTargetT):
         target_pattern = r"|".join(re.escape(item) for item in target_prefix_list)
         match_target = re.match(rf"^({target_pattern})\|(.*)", target_id)
         if match_target:
-            target_from = sender_from = match_target.group(1)
+            target_from = match_target.group(1)
             target_id = match_target.group(2)
+            sender_from = None
             if sender_id:
                 sender_pattern = r"|".join(
                     re.escape(item) for item in sender_prefix_list
@@ -279,8 +280,6 @@ class FetchTarget(FetchTargetT):
                 if match_sender:
                     sender_from = match_sender.group(1)
                     sender_id = match_sender.group(2)
-            else:
-                sender_id = target_id
             session = Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
             await session.parent.data_init()
             return session

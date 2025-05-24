@@ -1,7 +1,7 @@
 # ported from kurisu(https://github.com/nh-server/Kurisu/tree/main/cogs/results)
 import discord
 
-from core.builtins import Bot
+from core.builtins import Bot, I18NContext
 from core.component import module
 from core.utils.message import convert_discord_embed
 from . import switch, wiiu_support, wiiu_results, ctr_support, ctr_results
@@ -85,12 +85,12 @@ Only Nintendo Switch XXXX-YYYY formatted error codes are supported."
 e = module("nintendo_err", alias=["err"], developers=["OasisAkari", "kurisu"], doc=True)
 
 
-@e.command("<err_code> {{nintendo_err.help}}")
+@e.command("<err_code> {[I18N:nintendo_err.help]}")
 async def _(msg: Bot.MessageSession, err_code: str):
     results = Results()
     err = results.fixup_input(err_code)
     if meme := results.check_meme(err):
-        await msg.finish(msg.locale.t(meme))
+        await msg.finish(I18NContext(meme))
     try:
         ret = results.fetch(err)
     except ValueError:
@@ -104,4 +104,4 @@ async def _(msg: Bot.MessageSession, err_code: str):
             embed.add_field(name=field.field_name, value=field.message, inline=False)
         await msg.finish(convert_discord_embed(embed))
     else:
-        await msg.finish(msg.locale.t("nintendo_err.message.invalid"))
+        await msg.finish(I18NContext("nintendo_err.message.invalid"))

@@ -7,7 +7,6 @@ from botpy.message import C2CMessage, DirectMessage, GroupMessage, Message
 from botpy.errors import ServerError
 from botpy.types.message import Reference
 
-from bots.qqbot.info import *
 from core.builtins import (
     Bot,
     Plain,
@@ -26,6 +25,7 @@ from core.database.models import AnalyticsData, TargetInfo
 from core.logger import Logger
 from core.utils.http import download, url_pattern
 from core.utils.image import msgchain2image
+from .info import *
 
 
 enable_analytics = Config("enable_analytics", False)
@@ -421,8 +421,9 @@ class FetchTarget(FetchTargetT):
         target_pattern = r"|".join(re.escape(item) for item in target_prefix_list)
         match_target = re.match(rf"^({target_pattern})\|(.*)", target_id)
         if match_target:
-            target_from = sender_from = match_target.group(1)
+            target_from = match_target.group(1)
             target_id = match_target.group(2)
+            sender_from = None
             if sender_id:
                 sender_pattern = r"|".join(
                     re.escape(item) for item in sender_prefix_list
@@ -431,8 +432,6 @@ class FetchTarget(FetchTargetT):
                 if match_sender:
                     sender_from = match_sender.group(1)
                     sender_id = match_sender.group(2)
-            else:
-                sender_id = target_id
             session = Bot.FetchedSession(target_from, target_id, sender_from, sender_id)
             await session.parent.data_init()
             return session
@@ -479,9 +478,9 @@ class FetchTarget(FetchTargetT):
                         msgchain = message
                         if isinstance(message, str):
                             if i18n:
-                                msgchain = MessageChain([I18NContext(message, **kwargs)])
+                                msgchain = MessageChain(I18NContext(message, **kwargs))
                             else:
-                                msgchain = MessageChain([Plain(message)])
+                                msgchain = MessageChain(Plain(message))
                         msgchain = MessageChain(msgchain)
                         await fetch.send_direct_message(msgchain)
                         if enable_analytics and module_name:

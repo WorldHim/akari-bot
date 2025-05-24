@@ -4,12 +4,12 @@ import urllib.parse
 from core.builtins import Bot
 from core.dirty_check import check_bool, rickroll
 from core.logger import Logger
-from modules.wiki.utils.time import strptime2ts
+from modules.wiki.utils.utils import strptime2ts
 from modules.wiki.utils.wikilib import WikiLib
 
 
-async def get_user_info(msg: Bot.MessageSession, wikiurl, username):
-    wiki = WikiLib(wikiurl)
+async def get_user_info(msg: Bot.MessageSession, username, wikiurl, headers=None):
+    wiki = WikiLib(wikiurl, headers)
     if not await wiki.check_wiki_available():
         await msg.finish(
             msg.locale.t("wiki.message.user.wiki_unavailable", wikiurl=wikiurl)
@@ -20,8 +20,9 @@ async def get_user_info(msg: Bot.MessageSession, wikiurl, username):
         if match_interwiki.group(1) in wiki.wiki_info.interwiki:
             await get_user_info(
                 msg,
-                wiki.wiki_info.interwiki[match_interwiki.group(1)],
                 match_interwiki.group(2),
+                wiki.wiki_info.interwiki[match_interwiki.group(1)],
+                headers
             )
 
     data = {}

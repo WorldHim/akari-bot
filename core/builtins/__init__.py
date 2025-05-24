@@ -2,18 +2,18 @@ import asyncio
 from typing import Any, Dict, List, Optional, Union
 
 from core.config import Config
+from core.constants import base_superuser_default
 from core.constants.info import Info
+from core.database.models import TargetInfo
 from core.exports import add_export
 from core.loader import ModulesManager
+from core.logger import Logger
 from core.types.message import MsgInfo, Session, ModuleHookContext
 from .message import *
 from .message.chain import *
 from .message.internal import *
 from .temp import *
 from .utils import *
-from ..constants import base_superuser_default
-from ..database.models import TargetInfo
-from ..logger import Logger
 
 
 class Bot:
@@ -93,16 +93,16 @@ class FetchedSession(FetchedSession):
         self,
         target_from: str,
         target_id: Union[int, str],
-        sender_from: Optional[str] = None,
-        sender_id: Optional[Union[int, str]] = None,
+        sender_from: Optional[str],
+        sender_id: Optional[Union[str, int]],
     ):
-        if not sender_from:
-            sender_from = target_from
-        if not sender_id:
-            sender_id = target_id
+        target_id_ = f"{target_from}|{target_id}"
+        sender_id_ = None
+        if sender_from and sender_id:
+            sender_id_ = f"{sender_from}|{sender_id}"
         self.target = MsgInfo(
-            target_id=f"{target_from}|{target_id}",
-            sender_id=f"{sender_from}|{sender_id}",
+            target_id=target_id_,
+            sender_id=sender_id_,
             target_from=target_from,
             sender_from=sender_from,
             sender_name="",

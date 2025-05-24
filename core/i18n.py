@@ -12,7 +12,7 @@ import orjson as json
 
 from core.constants.default import lang_list
 from core.constants.path import locales_path, modules_locales_path
-from .utils.text import isint
+from core.utils.text import isint
 
 # Load all locale files into memory
 
@@ -193,20 +193,6 @@ class Locale:
         :param fallback_failed_prompt: 是否添加本地化失败提示。（默认为False）
         :returns: 本地化后的字符串。
         """
-        text = self._match_i18ncode(text)
-
-        if locale_str := re.findall(r"\{(.*)}", text):
-            for lc in locale_str:
-                text = text.replace(
-                    f"{{{lc}}}",
-                    self.t(lc, fallback_failed_prompt=fallback_failed_prompt, **kwargs),
-                )
-
-        text = self._match_i18ncode(text)
-
-        return text
-
-    def _match_i18ncode(self, text: str) -> str:
         split_all = re.split(r"(\[I18N:.*?])", text)
         split_all = [x for x in split_all if x]
         msgs = []
@@ -260,7 +246,7 @@ class Locale:
 
         unit, scale = unit_info
         fmted_num = self._fmt_num(number / scale, precision)
-        return self.t_str(f"{fmted_num} {{i18n.unit.{unit}}}", fallback_failed_prompt)
+        return self.t_str(f"{fmted_num} [I18N:i18n.unit.{unit}]", fallback_failed_prompt)
 
     @staticmethod
     def _get_cjk_unit(number: Decimal) -> Optional[Tuple[int, Decimal]]:

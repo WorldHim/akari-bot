@@ -5,7 +5,7 @@ import orjson as json
 from PIL import Image as PILImage
 
 from core.builtins import Bot
-from core.builtins.message import Image, Url
+from core.builtins.message import I18NContext, Image, Url
 from core.component import module
 from core.dirty_check import check_bool, rickroll
 from core.utils.http import download, get_url
@@ -15,20 +15,20 @@ from core.utils.web_render import webrender
 t = module(
     "tweet",
     developers=["Dianliang233"],
-    desc="{tweet.help.desc}",
+    desc="[I18N:tweet.help.desc]",
     doc=True,
     alias=["x"],
 )
 
 
-@t.command("<tweet> {{tweet.help}}")
+@t.command("<tweet> {[I18N:tweet.help]}")
 async def _(msg: Bot.MessageSession, tweet: int):
     await get_tweet(msg, tweet)
 
 
 @t.regex(r"(?:http[s]?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/\S+\/status\/(\d+)",
          mode="M",
-         desc="{tweet.help.regex.url}",
+         desc="[I18N:tweet.help.regex.url]",
          show_typing=False,
          text_only=False
          )
@@ -41,13 +41,13 @@ async def _(msg: Bot.MessageSession):
 async def get_tweet(msg: Bot.MessageSession, tweet_id: int):
     web_render = webrender("element_screenshot")
     if not web_render:
-        await msg.finish(msg.locale.t("error.config.webrender.invalid"))
+        await msg.finish(I18NContext("error.config.webrender.invalid"))
 
     try:
         res = await get_url(f"https://react-tweet.vercel.app/api/tweet/{tweet_id}", 200)
     except ValueError as e:
         if str(e).startswith("404"):
-            await msg.finish(msg.locale.t("tweet.message.not_found"))
+            await msg.finish(I18NContext("tweet.message.not_found"))
         else:
             raise e
 

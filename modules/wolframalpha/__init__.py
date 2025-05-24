@@ -3,7 +3,7 @@ import urllib.parse
 
 from PIL import Image as PILImage
 
-from core.builtins import Bot, Image as BImage
+from core.builtins import Bot, I18NContext, Image as BImage
 from core.component import module
 from core.config import Config
 from core.constants.exceptions import ConfigValueError
@@ -17,13 +17,13 @@ w = module(
     "wolframalpha",
     alias=["wolfram", "wa"],
     developers=["DoroWolf"],
-    desc="{wolframalpha.help.desc}",
+    desc="[I18N:wolframalpha.help.desc]",
     support_languages=["en_us"],
     doc=True,
 )
 
 
-@w.command("<query> {{wolframalpha.help}}")
+@w.command("<query> {[I18N:wolframalpha.help]}")
 async def _(msg: Bot.MessageSession, query: str):
     if await secret_check(query):
         await msg.finish(rickroll())
@@ -42,12 +42,12 @@ async def _(msg: Bot.MessageSession, query: str):
             await msg.finish([BImage(output)])
     except ValueError as e:
         if str(e).startswith("501"):
-            await msg.finish(msg.locale.t("wolframalpha.message.incomprehensible"))
+            await msg.finish(I18NContext("wolframalpha.message.incomprehensible"))
         else:
             raise e
 
 
-@w.command("ask <question> {{wolframalpha.help.ask}}")
+@w.command("ask <question> {[I18N:wolframalpha.help.ask]}")
 async def _(msg: Bot.MessageSession, question: str):
     if await secret_check(question):
         await msg.finish(rickroll())
@@ -60,6 +60,6 @@ async def _(msg: Bot.MessageSession, question: str):
         await msg.finish(data)
     except ValueError as e:
         if str(e).startswith("501"):
-            await msg.finish(msg.locale.t("wolframalpha.message.incomprehensible"))
+            await msg.finish(I18NContext("wolframalpha.message.incomprehensible"))
         else:
             raise e
